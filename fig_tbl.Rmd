@@ -1,0 +1,127 @@
+---
+title: "fig_tbl"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Goal
+
+This markdown produces the figures and tables used in ``locally anisotropic covariance functions on the sphere'', starting from Figure 4.
+
+```{r libs and source, eval = T, echo = F, include = F}
+rm(list = ls())
+source("func.R")
+```
+
+## Figure 4
+
+```{r fig 4, eval = F}
+fig4 <- function(){
+    set.seed(1)
+    alpha <- c(-0.7, 0.35, 0.44)  
+    beta <- c(-1.2, 0.25, 0.44)  
+    kappa <- 0
+    range <- - 2 / log(0.05)
+    nu <- 0.5
+    nuggets = 0.05^2
+    nsrt <- 50
+    grd.obj <- grd_gen(nsrt)
+    z.all <- z_gen(alpha, beta, grd.obj$grd.all, kappa, nu, range, nuggets)
+    sphere_plot(z.all, rep(T, length(z.all)), grd.obj$lon, grd.obj$lat,
+                draw.palette = T, fn = "example_alldata.pdf")
+}
+fig4()
+```
+
+## Figure 5
+
+```{r score functions, eval = T}
+
+```
+
+```{r fig 5 6 7 tbl 1, eval = F}
+sim_study <- function(type = c("iso", "axially", "nonsta")){
+    set.seed(1)
+    type = type[1]
+    if(type == "iso"){
+        alpha <- c(-0.5, 0.0, 0.0)  
+        beta <- c(-0.5, 0.0, 0.0)  
+        kappa <- 0
+    }else if(type == "axially"){
+        alpha <- c(-0.5, 0.0, 1.44)  
+        beta <- c(-3.2, 0.0, 1.44)  
+        kappa <- 0
+    }else if(type == "nonsta"){
+        alpha <- c(-0.5, -1.2, 1.44)  
+        beta <- c(-3.2, -0.3, 1.44)  
+        kappa <- 0.8
+    }else{
+        stop("Unsupported covariance type\n")
+    }
+    range <- - 2 / log(0.05)
+    nu <- 0.5
+    nuggets = 0.05^2
+    nsrt <- 50
+    grd.obj <- grd_gen(nsrt)
+    z.all <- z_gen(alpha, beta, grd.obj$grd.all, kappa, nu, range, nuggets)
+    
+    prop.train <- 0.7
+    mask.train.rnd <- mask_gen_rnd(ns, prop.train)
+    mask.test.rnd <- !mask.train.rnd
+    mask.train.region <- mask_gen_region(rd.obj$grd.all, 2.5, 1.0)
+    mask.test.region <- !mask.train.region
+    locxyz.all <- cart(grd.obj$grd.all[, 1], grd.obj$grd.all[, 2])
+    par0.lst <- list(c(rep(0, 7), nu, range),
+                     c(rep(0, 7), nu, range),
+                     c(rep(0, 7), nu, range))
+    par.mask.lst <- list(c(T, F, F, T, F, F, F, F, F),
+                         c(T, F, T, T, F, T, F, F, F),
+                         c(T, T, T, T, T, T, T, F, F))
+    mdl.lst <- list("iso", "axially", "nonsta")
+    m <- 10
+    n.MCMC <- 5000
+    burnin <- 1000
+    
+    sphere_plot(z.all, mask.train.rnd, grd.obj$lon, grd.obj$lat,
+                draw.palette = F, fn = paste0("rand-", type, "-true.pdf"))
+    sphere_plot(z.all, mask.train.region, grd.obj$lon, grd.obj$lat,
+                draw.palette = F, fn = paste0("rect-", type, "-true.pdf"))
+    
+    tbl <- matrix(NA, 3, 8)
+    colnames(tbl) <- c(paste0(c("MAE", "RMSE", "CRPS", "Energy"), "-rnd"), 
+                       paste0(c("MAE", "RMSE", "CRPS", "Energy"), "-region"))
+    rownames(tbl) <- c("Isotropic", "Axially symmetric", "Nonstationary")
+    tbl <- as.data.frame(tbl)
+    
+    for(i in 1 : length(par0.lst)){
+        par0 <- par0.lst[i]
+        par.mask <- par.mask.lst[i]
+        parm.est.rnd <- parm_est(par0, par.mask, z.all[mask.train.rnd], 
+                                 locxyz.all[mask.train.rnd, ], m, nuggets,
+                                 n.MCMC, burnin)
+        parm.est.region <- parm_est(par0, par.mask, z.all[mask.train.rnd], 
+                                 locxyz.all[mask.train.rnd, ], m, nuggets,
+                                 n.MCMC, burnin)
+        z.pred.rnd <- resp_pred(parm.est.rnd, z.all[mask.train.rnd], 
+                                locxyz.all[mask.train.rnd, ], 
+                                locxyz.all[mask.test.rnd, ], m, nuggets)
+        z.pred.region <- resp_pred(parm.est.region, z.all[mask.train.region], 
+                                locxyz.all[mask.train.region, ], 
+                                locxyz.all[mask.test.region, ], m, nuggets)
+        # Add in table computation here
+        sphere_plot(z.all, mask.train.rnd, grd.obj$lon, grd.obj$lat,
+                    draw.palette = F, 
+                    fn = paste0("rand-", type, "-", mdl.lst[[i]], "-pred.pdf"))
+        sphere_plot(z.all, mask.train.region, grd.obj$lon, grd.obj$lat,
+                    draw.palette = F, 
+                    fn = paste0("rect-", type, "-", mdl.lst[[i]], "-pred.pdf"))
+    }
+}
+sim_study("iso")
+```
+
+
+
