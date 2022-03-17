@@ -48,18 +48,32 @@ grd_gen <- function(nsrt) {
 
 
 ###### Generate mask ######
-mask_gen <- function(ns, prop) {
-    index = sample(1 : ns, size = prop * ns, replace = FALSE)
-    mask = rep(FALSE, ns)
-    mask[index] = TRUE
+mask_gen_rnd <- function(ns, prop) {
+    index <- sample(1 : ns, size = prop * ns, replace = FALSE)
+    mask <- rep(FALSE, ns)
+    mask[index] <- TRUE
     return(mask)
+}
+mask_gen_region <- function(grd.all, lon.width, lat.width) {
+    ns <- nrow(grd.all)
+    index <- sample(1 : ns, size = 1)
+    lon <- grd.all[index, 1]
+    lat <- grd.all[index, 2]
+    
+    lon.mask <- abs(grd.all[, 1] - lon) < lon.width | 
+        abs(grd.all[, 1] - lon - 2*pi) < lon.width |
+        abs(grd.all[, 1] - lon + 2*pi) < lon.width
+    lat.mask <- abs(grd.all[, 2] - lat) < lat.width 
+    return(lon.mask & lat.mask)
 }
 
 
 ###### Generate responses ######
-z_gen <- function(gamma1, gamma2, grd.all, kappa, nu, range, nuggets, 
+z_gen <- function(alpha, beta, grd.all, kappa, nu, range, nuggets, 
                   cluster = NULL){
     n <- nrow(grd.all)
+    gamma1 <- exp(alpha[1]+alpha[2]*sin(grd.all[,1])+alpha[3]*grd.all[,2])
+    gamma2 <- exp(beta[1]+beta[2]*sin(grd.all[,1])+beta[3]*grd.all[,2])
     if(is.null(cluster)){
         inner.cluster = T
         cluster <- makeCluster(detectCores())
@@ -77,14 +91,14 @@ z_gen <- function(gamma1, gamma2, grd.all, kappa, nu, range, nuggets,
     clusterExport(cluster, c("Rx", "Ry", "Rz", "cart"), envir = .GlobalEnv)
     Sigma <- parLapply(cluster, Sigma.input, Sigma.func) 
     clusterExport(cluster, c("grd.all", "Sigma", "n"), envir = environment())
-    dis.func <- function(x){
+    dis.func <- function(x){ ## problem here
         if(x < 1)
             return(0)
         i = (x - 1) %% n + 1
         j = floor((x - 1) / n) + 1
         cart.diff = cart(grd.all[i,1], grd.all[i,2])-
             cart(grd.all[j,1], grd.all[j,2])
-        2 * (cart.diff %*% solve(Sigma[[i]] + Sigma[[j]]) %*% 
+        sqrt(2) * (cart.diff %*% solve(Sigma[[i]] + Sigma[[j]]) %*% 
                  t(cart.diff))^(1/2)
     }
     c.func <- function(x){
@@ -121,14 +135,14 @@ parm_est <- function(par0, mask, z, locs, m, nuggets, n.MCMC, burnin)
     loglikMCMC <- function(par){
         parLong <- par0
         parLong[mask] <- par
-        return(vecchia_likelihood(
+        return(tryCatch(vecchia_likelihood(
             z = z,
             vecchia.approx = vecchia.approx,
             # alpha, beta, kappa, nu, range
             covparms = parLong,
             nuggets = nuggets,
             covmodel = "sphere"
-        ))
+        ), error = function(x){return(-Inf)}))
     }
     scale <- rep(1, sum(mask))
     samp <- MCMC(p=loglikMCMC, n=n.MCMC, init=par0[mask], scale = scale, 
@@ -137,7 +151,9 @@ parm_est <- function(par0, mask, z, locs, m, nuggets, n.MCMC, burnin)
     #thinned values after convergence
     samp.eff <- samp$samples[seq(burnin, n.MCMC, by=10), ] 
     #par.est
-    colMeans(samp.eff)
+    par.est <- par0
+    par.est[mask] <- colMeans(samp.eff)
+    par.est
 }
 
 
@@ -149,22 +165,29 @@ resp_pred <- function(par, z, locs, locs.pred, m, nuggets)
     preds <- vecchia_prediction(z = z, vecchia.approx = vecchia.approx, 
                                 covparms = par, nuggets = nuggets, 
                                 covmodel = "sphere")
-    preds$mu.pred
+    list(mu = preds$mu.pred, var = preds$var.pred)
 }
 
 
 ###### Prediction Unknown Locs ######
-sphere_plot <- function(z.all, mask, lon, lat, zlim = range(z.all, na.rm = T)){
+sphere_plot <- function(z.all, mask, lon, lat, zlim = range(z.all, na.rm = T), 
+                        draw.palette = T, fn = NULL, fig.width = 7, 
+                        fig.height = 5){
     z.all[!mask] <- NA
     z.all.mat <- matrix(z.all, nrow = length(lon))
     cm <- colormap(zlim = zlim)
     par(mar = c(2, 1, 1, 1))
-    drawPalette(colormap = cm)
+    if(!is.null(fn))
+        pdf(fn, fig.width, fig.height)
+    if(draw.palette)
+        drawPalette(colormap = cm)
     mapPlot(longitude = c(-180, 180, 0, 0), latitude = c(0, 0, -90, 90), 
             grid = TRUE, col = "lightgray", drawBox = FALSE, 
             longitudelim = c(-180, 180), type = "n") # defaults to moll projection
     mapImage(longitude = lon*180/pi, latitude = lat*180/pi, z = z.all.mat, 
              zlim = zlim, colormap = cm, missingColor = NA)
+    if(!is.null(fn))
+        dev.off()
 }
 
 

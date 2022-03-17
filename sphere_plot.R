@@ -16,7 +16,7 @@ mapPlot(longitude=c(-180,180,0,0), latitude=c(0,0,-90,90), projection="+proj=mol
 mapImage(longitude=lon*180/pi, latitude=lat*180/pi, z=z.all.mat,zlim=zlim, colormap=cm,missingColor=NA)
 
 
-
+        
 # training data
 z.train = z.all
 z.train[mask.test]=NA
