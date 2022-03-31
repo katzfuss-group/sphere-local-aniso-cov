@@ -66,102 +66,8 @@ sim_study <- function(type = c("iso", "axially", "nonsta"), plot.flag = F){
     grd.obj <- grd_gen(nsrt)
     z.all <- z_gen(alpha, beta, grd.obj$grd.all, kappa, nu, range, nuggets)
     
-    prop.train <- 0.8
-    n.test.region <- 10
-    mask.train.rnd <- mask_gen_rnd(ns, prop.train)
-    mask.test.rnd <- !mask.train.rnd
-    mask.train.region <- rep(T, ns)
-    for(i in 1 : n.test.region){
-        mask.train.region <- mask.train.region & 
-            mask_gen_region(grd.obj$grd.all, 0.4, 0.2)
-    }
-    mask.test.region <- !mask.train.region
-    locxyz.all <- cart(grd.obj$grd.all[, 1], grd.obj$grd.all[, 2])
-    par0.lst <- list(c(rep(0, 7), nu, range),
-                     c(rep(0, 7), nu, range),
-                     c(rep(0, 7), nu, range))
-    par.mask.lst <- list(c(T, F, F, T, F, F, F, F, F),
-                         c(T, F, T, T, F, T, F, F, F),
-                         c(T, T, T, T, T, T, T, F, F))
-    mdl.lst <- list("iso", "axially", "nonsta")
-    m <- 10
-    n.MCMC <- 5000
-    burnin <- 1000
-    
-    if(plot.flag){
-        sphere_plot(z.all, mask.train.rnd, grd.obj$lon, grd.obj$lat,
-                draw.palette = F, fn = paste0("rand-", type, "-true.pdf"))
-        sphere_plot(z.all, mask.train.region, grd.obj$lon, grd.obj$lat,
-                    draw.palette = F, fn = paste0("rect-", type, "-true.pdf"))
-    }else{
-        input <- list(z.all = z.all, mask = mask.train.rnd, lon = grd.obj$lon,
-                      lat = grd.obj$lat, draw.palette = F, 
-                      fn = paste0("rand-", type, "-true.pdf"))
-        save(input, file = paste0("rand-", type, "-true.RData"))
-        input <- list(z.all = z.all, mask = mask.train.region, lon = grd.obj$lon,
-                      lat = grd.obj$lat, draw.palette = F, 
-                      fn = paste0("rect-", type, "-true.pdf"))
-        save(input, file = paste0("rect-", type, "-true.RData"))
-    }
-    
-    tbl <- matrix(NA, 3, 8)
-    colnames(tbl) <- c(paste0(c("MAE", "RMSE", "CRPS", "Energy"), "-rnd"), 
-                       paste0(c("MAE", "RMSE", "CRPS", "Energy"), "-region"))
-    rownames(tbl) <- c("Isotropic", "Axially symmetric", "Nonstationary")
-    tbl <- as.data.frame(tbl)
-    
-    for(i in 1 : length(par0.lst)){
-        par0 <- par0.lst[[i]]
-        par.mask <- par.mask.lst[[i]]
-        parm.est.rnd <- parm_est(par0, par.mask, z.all[mask.train.rnd], 
-                                 locxyz.all[mask.train.rnd, ], m, nuggets,
-                                 n.MCMC, burnin)
-        parm.est.region <- parm_est(par0, par.mask, z.all[mask.train.rnd], 
-                                 locxyz.all[mask.train.rnd, ], m, nuggets,
-                                 n.MCMC, burnin)
-        z.pred.rnd <- resp_pred(parm.est.rnd, z.all[mask.train.rnd], 
-                                locxyz.all[mask.train.rnd, ], 
-                                locxyz.all[mask.test.rnd, ], m, nuggets)
-        z.pred.region <- resp_pred(parm.est.region, z.all[mask.train.region], 
-                                locxyz.all[mask.train.region, ], 
-                                locxyz.all[mask.test.region, ], m, nuggets)
-        tbl[i, ] <- c(score_func(z.all[mask.test.rnd], z.pred.rnd), 
-                      score_func(z.all[mask.test.region], z.pred.region))
-        z.all.pred <- z.all
-        z.all.pred[mask.test.rnd] <- z.pred.rnd$mu.pred
-        if(plot.flag){
-            sphere_plot(z.all.pred, rep(T, ns), grd.obj$lon, grd.obj$lat,
-                        draw.palette = F, 
-                        fn = paste0("rand-", type, "-", 
-                                    mdl.lst[[i]], "-pred.pdf"))
-        }else{
-            input <- list(z.all = z.all.pred, mask = rep(T, ns), 
-                          lon = grd.obj$lon, 
-                          lat = grd.obj$lat, draw.palette = F, 
-                          fn = paste0("rand-", type, "-", 
-                                    mdl.lst[[i]], "-pred.pdf"))
-            save(input, file = paste0("rand-", type, "-", 
-                                    mdl.lst[[i]], "-pred.RData"))
-        }
-        
-        
-        z.all.pred <- z.all
-        z.all.pred[mask.test.region] <- z.pred.region$mu.pred
-        if(plot.flag){
-            sphere_plot(z.all.pred, rep(T, ns), grd.obj$lon, grd.obj$lat,
-                    draw.palette = F, 
-                    fn = paste0("rect-", type, "-", mdl.lst[[i]], "-pred.pdf"))
-        }else{
-            input <- list(z.all = z.all.pred, mask = rep(T, ns), lon = grd.obj$lon,
-                          lat = grd.obj$lat, draw.palette = F, 
-                          fn = paste0("rect-", type, "-", 
-                                      mdl.lst[[i]], "-pred.pdf"))
-            save(input, file = paste0("rect-", type, "-", 
-                                      mdl.lst[[i]], "-pred.RData"))
-        }
-    }
-    write.table(format(tbl, digits=4), paste0("tbl_", type, ".out"), 
-                sep = " & ", eol = "\\\\\n", quote = F)
+    sim_func(ns = ns, grd.obj = grd.obj, z.all = z.all, nu = nu, 
+             range = range, nuggets = nuggets, type = type)
 }
 sim_study("iso")
 ```
@@ -174,15 +80,6 @@ for(fn in list.files(pattern = "(rect|rand).*RData")){
                 fn = input$fn, fig.width = 11.11, fig.height = 8.33, 
                 zlim = c(-3, 3))
 }
-```
-
-```{r tmp}
-for(fn in list.files(pattern = "tbl.*out")){
-    tbl.tmp <- read.table(fn, sep = "&", comment.char = "\\")
-    write.table(format(tbl.tmp, digits=4), fn, quote = F,
-                sep = " & ", eol = "\\\\\n")
-}
-
 ```
 
 ## Real Data Application
@@ -203,7 +100,8 @@ real_app <- function()
     ns <- length(z.all)
     sphere_plot(z.all, rep(T, length(z.all)), lon, lat, fig.width = 13.44, 
                 fig.height = 8.73, draw.palette = T, fn = "Dec2019Temp.pdf")
-    sim_func(ns, grd.obj, z.all, "real")
+    sim_func(ns = ns, grd.obj = grd.obj, z.all = z.all, nu = 2.5, 
+             range = range, nuggets = nuggets, type = "real")
     
 }
 real_app()
