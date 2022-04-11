@@ -129,13 +129,20 @@ z_gen <- function(alpha, beta, grd.all, kappa, nu, range, nuggets,
 
 
 ###### Parameter Estimation ######
-parm_est <- function(par0, mask, z, locs, m, nuggets, n.MCMC, burnin)
+parm_est <- function(par0, mask, z, locs, m, nuggets, n.MCMC, burnin,
+                     debugFn = NULL)
 {
     vecchia.approx <- vecchia_specify(locs = locs, m = m, 
                                       cond.yz = 'y',ic0=TRUE)
     loglikMCMC <- function(par){
         parLong <- par0
         parLong[mask] <- par
+        # special treatment for range
+        # the last coef in par0 is treated as log range if 
+        #   the last coef in mask if TRUE
+        if(mask[length(mask)])
+            parLong[length(mask)] <- exp(parLong[length(mask)])
+        # Vecchia loglk
         return(tryCatch(vecchia_likelihood(
             z = z,
             vecchia.approx = vecchia.approx,
@@ -149,6 +156,9 @@ parm_est <- function(par0, mask, z, locs, m, nuggets, n.MCMC, burnin)
     samp <- MCMC(p=loglikMCMC, n=n.MCMC, init=par0[mask], scale = scale, 
                  adapt = TRUE, acc.rate = 0.23, gamma = 2/3,
                  showProgressBar=TRUE)
+    # debug statement
+    if(!is.null(debugFn))
+        save(samp, file = debugFn)
     #thinned values after convergence
     samp.eff <- samp$samples[seq(burnin, n.MCMC, by=10), ] 
     #par.est
@@ -268,12 +278,32 @@ sim_func <- function(ns, grd.obj, z.all, nu, range, nuggets,
     for(i in 1 : length(par0.lst)){
         par0 <- par0.lst[[i]]
         par.mask <- par.mask.lst[[i]]
+        # special treatment for the range par
+        # change the last coef in par0 to log par0 if the last coef in
+        #   par.mask is TRUE
+        if(par.mask[length(par.mask)])
+            par0[length(par.mask)] <- log(par0[length(par.mask)])
         parm.est.rnd <- parm_est(par0, par.mask, z.all[mask.train.rnd], 
                                  locxyz.all[mask.train.rnd, ], m, nuggets,
-                                 n.MCMC, burnin)
-        parm.est.region <- parm_est(par0, par.mask, z.all[mask.train.rnd], 
-                                    locxyz.all[mask.train.rnd, ], m, nuggets,
-                                    n.MCMC, burnin)
+                                 n.MCMC, burnin, 
+                                 debugFn = paste0("rand-", type, "-", 
+                                                  mdl.lst[[i]], "-parm.RData"))
+        parm.est.region <- parm_est(par0, par.mask, z.all[mask.train.region], 
+                                    locxyz.all[mask.train.region, ], m, nuggets,
+                                    n.MCMC, burnin, 
+                                    debugFn = paste0("rect-", type, "-", 
+                                                     mdl.lst[[i]], 
+                                                     "-parm.RData"))
+        # special treatment for the range par
+        # change the last coef in parm.est to exp parm.est if the last coef in
+        #   par.mask is TRUE
+        if(par.mask[length(par.mask)]){
+            parm.est.rnd[length(par.mask)] <- 
+                exp(parm.est.rnd[length(par.mask)])
+            parm.est.region[length(par.mask)] <- 
+                exp(parm.est.region[length(par.mask)])
+        }
+            
         z.pred.rnd <- resp_pred(parm.est.rnd, z.all[mask.train.rnd], 
                                 locxyz.all[mask.train.rnd, ], 
                                 locxyz.all[mask.test.rnd, ], m, nuggets)
@@ -305,9 +335,11 @@ sim_func <- function(ns, grd.obj, z.all, nu, range, nuggets,
         if(plot.flag){
             sphere_plot(z.all.pred, rep(T, ns), grd.obj$lon, grd.obj$lat,
                         draw.palette = F, 
-                        fn = paste0("rect-", type, "-", mdl.lst[[i]], "-pred.pdf"))
+                        fn = paste0("rect-", type, "-", mdl.lst[[i]], 
+                                    "-pred.pdf"))
         }else{
-            input <- list(z.all = z.all.pred, mask = rep(T, ns), lon = grd.obj$lon,
+            input <- list(z.all = z.all.pred, mask = rep(T, ns), 
+                          lon = grd.obj$lon,
                           lat = grd.obj$lat, draw.palette = F, 
                           fn = paste0("rect-", type, "-", 
                                       mdl.lst[[i]], "-pred.pdf"))
