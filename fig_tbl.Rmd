@@ -89,9 +89,9 @@ real_app <- function(test.flag = F, plot.flag = F)
 {
     set.seed(1)
     data <- nc_open("tas_Amon_GFDL-CM3_rcp26_r1i1p1_200601-201012.nc")
-    lon <- ncvar_get(data, "lon") / 180 * pi - pi
-    lat <- ncvar_get(data, "lat") / 180 * pi
-    time <- ncvar_get(data, "time")
+    lon <- as.numeric(ncvar_get(data, "lon") / 180 * pi - pi)
+    lat <- as.numeric(ncvar_get(data, "lat") / 180 * pi)
+    time <- as.numeric(ncvar_get(data, "time"))
     tas <- ncvar_get(data, "tas")
     idx.time <- 48
     z.all <- as.vector(tas[, , idx.time])
@@ -105,17 +105,17 @@ real_app <- function(test.flag = F, plot.flag = F)
     grd.all <- as.matrix(expand.grid(lon, lat))
     grd.obj <- list(lon = lon, lat = lat, grd.all = grd.all)
     ns <- length(z.all)
+    z.lat.mean <- colMeans(tas[, , idx.time])
+    z.lat.sd <- apply(tas[, , idx.time], MARGIN = 2, FUN = sd)
+    z.all <- as.numeric((z.all - kronecker(z.lat.mean, rep(1, length(lon)))) /
+        kronecker(z.lat.sd, rep(1, length(lon))))
     if(plot.flag)
         sphere_plot(z.all, rep(T, length(z.all)), lon, lat, fig.width = 13.44, 
                     fig.height = 8.73, draw.palette = T, fn = "Dec2019Temp.pdf")
-    z.lat.mean <- colMeans(tas[, , idx.time])
-    z.lat.sd <- apply(tas[, , idx.time], MARGIN = 2, FUN = sd)
-    z.all <- (z.all - kronecker(z.lat.mean, rep(1, length(lon)))) /
-        kronecker(z.lat.sd, rep(1, length(lon)))
     sim_func(ns = ns, grd.obj = grd.obj, z.all = z.all, nu = 2.5, 
              range = 0.1, nuggets = 0.05^2, type = "real")
 }
-real_app(test.flag = T)
+real_app(test.flag = F)
 ```
 
 
