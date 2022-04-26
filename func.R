@@ -142,6 +142,10 @@ parm_est <- function(par0, mask, z, locs, m, nuggets, n.MCMC, burnin,
         #   the last coef in mask if TRUE
         if(mask[length(mask)])
             parLong[length(mask)] <- exp(parLong[length(mask)])
+        # special treatment for iso
+        #   set beta10 and beta20 to be the same
+        if(mask[1] == T & mask[4] == F)
+            parLong[4] <- parLong[1]
         # Vecchia loglk
         loglk <- tryCatch(vecchia_likelihood(
             z = z,
@@ -247,14 +251,14 @@ sim_func <- function(ns, grd.obj, z.all, nu, range, nuggets,
                            .0,.0,2.500000,exp(-2.5987020)),
                          c(-0.2736117,.0,.0,-1.5002264,.0,
                            .0,.0,2.500000,exp(-2.5987020)))
-        par.mask.lst <- list(c(T, F, F, T, F, F, F, F, T),
+        par.mask.lst <- list(c(T, F, F, F, F, F, F, F, T),
                              c(T, F, T, T, F, T, F, F, T),
                              c(T, T, T, T, T, T, T, F, T))
     }else{
         par0.lst <- list(c(rep(0, 7), nu, range),
                          c(rep(0, 7), nu, range),
                          c(rep(0, 7), nu, range))
-        par.mask.lst <- list(c(T, F, F, T, F, F, F, F, F),
+        par.mask.lst <- list(c(T, F, F, F, F, F, F, F, F),
                              c(T, F, T, T, F, T, F, F, F),
                              c(T, T, T, T, T, T, T, F, F))
     }
@@ -295,20 +299,10 @@ sim_func <- function(ns, grd.obj, z.all, nu, range, nuggets,
             par0[length(par.mask)] <- log(par0[length(par.mask)])
         parm.est.rnd <- parm_est(par0, par.mask, z.all[mask.train.rnd],
                                   locxyz.all[mask.train.rnd, ], m, nuggets,
-                                  n.MCMC, burnin,
-                                  debugFn = paste0("rand-", type, "-",
-                                                   mdl.lst[[i]], "-parm.RData"))
+                                  n.MCMC, burnin)
         parm.est.region <- parm_est(par0, par.mask, z.all[mask.train.region],
                                     locxyz.all[mask.train.region, ], m, nuggets,
-                                    n.MCMC, burnin,
-                                    debugFn = paste0("rect-", type, "-",
-                                                     mdl.lst[[i]],
-                                                     "-parm.RData"))
-        # Some values used for debugging
-        # parm.est.rnd <- c(-0.2736117,.0,.0,-1.5002264,.0,.0,.0,2.500000,-2.5987020) # This parm gives very nice loglk
-        # parm.est.region <- c(1.914647,.0,.0,-1.044741,.0,.0,.0,2.500000,-2.545099) # This parm gives NaN loglk
-        
-        
+                                    n.MCMC, burnin)
         # special treatment for the range par
         # change the last coef in parm.est to exp parm.est if the last coef in
         #   par.mask is TRUE
@@ -343,7 +337,6 @@ sim_func <- function(ns, grd.obj, z.all, nu, range, nuggets,
             save(input, file = paste0("rand-", type, "-", 
                                       mdl.lst[[i]], "-pred.RData"))
         }
-        
         
         z.all.pred <- z.all
         z.all.pred[mask.test.region] <- z.pred.region$mu.pred
