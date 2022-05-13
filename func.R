@@ -132,7 +132,7 @@ z_gen <- function(alpha, beta, grd.all, kappa, nu, range, nuggets,
 parm_est <- function(par0, mask, z, locs, m, nuggets, n.MCMC, burnin,
                      debugFn = NULL)
 {
-    vecchia.approx <- vecchia_specify(locs = locs, m = m, 
+    vecchia.approx <- vecchia_specify(locs = locs, m = m,
                                       cond.yz = 'y',ic0=TRUE)
     loglikMCMC <- function(par){
         parLong <- par0
@@ -146,29 +146,35 @@ parm_est <- function(par0, mask, z, locs, m, nuggets, n.MCMC, burnin,
         #   set beta10 and beta20 to be the same
         if(mask[1] == T & mask[4] == F)
             parLong[4] <- parLong[1]
-        # Vecchia loglk
-        loglk <- tryCatch(vecchia_likelihood(
-            z = z,
-            vecchia.approx = vecchia.approx,
-            # alpha, beta, kappa, nu, range
-            covparms = parLong,
-            nuggets = nuggets,
-            covmodel = "sphere"
-        ), error = function(x){return(-Inf)})
+        cat("Parm = ", parLong)
+        if(parLong[9] > 10){
+            loglk <- -Inf
+        }else{
+            # Vecchia loglk
+            loglk <- tryCatch(vecchia_likelihood(
+                z = z,
+                vecchia.approx = vecchia.approx,
+                # alpha, beta, kappa, nu, range
+                covparms = parLong,
+                nuggets = nuggets,
+                covmodel = "sphere"
+            ), warning = function(x){return(-Inf)},
+            error = function(x){return(-Inf)})
+        }
         if(is.nan(loglk))
             loglk <- -Inf
-        cat("Parm = ", parLong, " loglk = ", loglk, "\n")
+        cat(" loglk = ", loglk, "\n")
         return(loglk)
     }
     scale <- rep(1, sum(mask))
-    samp <- MCMC(p=loglikMCMC, n=n.MCMC, init=par0[mask], scale = scale, 
+    samp <- MCMC(p=loglikMCMC, n=n.MCMC, init=par0[mask], scale = scale,
                  adapt = TRUE, acc.rate = 0.23, gamma = 2/3,
                  showProgressBar=TRUE)
     # debug statement
     if(!is.null(debugFn))
         save(samp, file = debugFn)
     #thinned values after convergence
-    samp.eff <- samp$samples[seq(burnin, n.MCMC, by=10), , drop = F] 
+    samp.eff <- samp$samples[seq(burnin, n.MCMC, by=10), ]
     #par.est
     par.est <- par0
     par.est[mask] <- colMeans(samp.eff)
