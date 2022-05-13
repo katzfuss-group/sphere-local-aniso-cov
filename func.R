@@ -157,6 +157,7 @@ parm_est <- function(par0, mask, z, locs, m, nuggets, n.MCMC, burnin,
         ), error = function(x){return(-Inf)})
         if(is.nan(loglk))
             loglk <- -Inf
+        cat("Parm = ", parLong, " loglk = ", loglk, "\n")
         return(loglk)
     }
     scale <- rep(1, sum(mask))
@@ -167,7 +168,7 @@ parm_est <- function(par0, mask, z, locs, m, nuggets, n.MCMC, burnin,
     if(!is.null(debugFn))
         save(samp, file = debugFn)
     #thinned values after convergence
-    samp.eff <- samp$samples[seq(burnin, n.MCMC, by=10), ] 
+    samp.eff <- samp$samples[seq(burnin, n.MCMC, by=10), , drop = F] 
     #par.est
     par.est <- par0
     par.est[mask] <- colMeans(samp.eff)

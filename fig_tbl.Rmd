@@ -39,7 +39,7 @@ fig4()
 ## Figure 5
 
 Setting the `range` parameter to `0.1`, in the isotropic case, we have on average $29$ responses that are correlated with each response by more than $5\%$.
-```{r fig 5 6 7 tbl 1, eval = F}
+```{r fig 5 6 7 tbl 1, eval = F, echo=FALSE}
 sim_study <- function(type = c("iso", "axially", "nonsta"), plot.flag = F){
     set.seed(1)
     type = type[1]
@@ -69,7 +69,7 @@ sim_study <- function(type = c("iso", "axially", "nonsta"), plot.flag = F){
     sim_func(ns = ns, grd.obj = grd.obj, z.all = z.all, nu = nu, 
              range = range, nuggets = nuggets, type = type)
 }
-sim_study("iso")
+sim_study("nonsta")
 ```
 
 ```{r plot sim data rslt, eval = F}
@@ -82,9 +82,9 @@ for(fn in list.files(pattern = "(rect|rand).*RData")){
 }
 ```
 
-## Real Data Application
+## Real Data Application Temperature
 
-```{r real data, eval = F}
+```{r real data temperature, eval = F}
 real_app <- function(test.flag = F, plot.flag = F)
 {
     set.seed(1)
@@ -94,6 +94,7 @@ real_app <- function(test.flag = F, plot.flag = F)
     time <- as.numeric(ncvar_get(data, "time"))
     tas <- ncvar_get(data, "tas")
     idx.time <- 48
+    idx.time.mean <- seq(from = 12, to = length(time), by = 12)
     z.all <- as.vector(tas[, , idx.time])
     if(test.flag){
         lon.idx <- round(seq(from = 1, to = length(lon), length.out = 72))
@@ -105,18 +106,99 @@ real_app <- function(test.flag = F, plot.flag = F)
     grd.all <- as.matrix(expand.grid(lon, lat))
     grd.obj <- list(lon = lon, lat = lat, grd.all = grd.all)
     ns <- length(z.all)
-    z.lat.mean <- colMeans(tas[, , idx.time])
-    z.lat.sd <- apply(tas[, , idx.time], MARGIN = 2, FUN = sd)
-    z.all <- as.numeric((z.all - kronecker(z.lat.mean, rep(1, length(lon)))) /
-        kronecker(z.lat.sd, rep(1, length(lon))))
+    z.mean <- tas[, , idx.time.mean[1]]
+    for(i in 2 : length(idx.time.mean))
+        z.mean = z.mean + tas[, , idx.time.mean[i]]
+    z.mean = z.mean / length(idx.time.mean)
+    z.all <- (z.all - as.vector(z.mean))
+    z.all <- z.all / sd(z.all)
     if(plot.flag)
         sphere_plot(z.all, rep(T, length(z.all)), lon, lat, fig.width = 13.44, 
                     fig.height = 8.73, draw.palette = T, fn = "Dec2019Temp.pdf")
     sim_func(ns = ns, grd.obj = grd.obj, z.all = z.all, nu = 2.5, 
-             range = 0.1, nuggets = 0.05^2, type = "real")
+             range = 0.1, nuggets = 0.05^2, type = "real", plot.flag = plot.flag)
 }
-real_app(test.flag = F)
+real_app(test.flag = F, plot.flag = T)
 ```
+
+## Real Data Application Precipitation
+
+```{r real data precipitation, eval = F}
+real_app <- function(plot.flag = F)
+{
+    set.seed(1)
+    load(file='data/prec_all.RData') # lon,lat,prec
+    x=log(prec+1e-10)
+    x=scale(t(x)) # standardize
+    lon <- unique(as.numeric(lon / 180 * pi - pi))
+    lat <- unique(as.numeric(lat / 180 * pi))
+    z.all <- matrix(x[1, ], 288, 192, byrow = F)
+    # down-scaling
+    idx.lon <- seq(from = 1, to = length(lon), by = 2)
+    idx.lat <- seq(from = 1, to = length(lat), by = 2)
+    lon <- lon[idx.lon]
+    lat <- lat[idx.lat]
+    z.all <- z.all[idx.lon, idx.lat]
+    # Fit GP
+    grd.all <- as.matrix(expand.grid(lon, lat))
+    grd.obj <- list(lon = lon, lat = lat, grd.all = grd.all)
+    ns <- length(z.all)
+    if(plot.flag)
+        sphere_plot(z.all, rep(T, length(z.all)), lon, lat, fig.width = 13.44, 
+                    fig.height = 8.73, draw.palette = T, fn = "Dec2019Prcp.pdf")
+    sim_func(ns = ns, grd.obj = grd.obj, z.all = z.all, nu = 2.5, 
+             range = 0.1, nuggets = 0.05^2, type = "real", plot.flag = plot.flag)
+}
+real_app(plot.flag = T)
+```
+
+## Export data into csv
+
+This part is written for the transport map experiment.
+```{r export csv, eval = F}
+export_temp <- function(){
+    data <- nc_open("tas_Amon_GFDL-CM3_rcp26_r1i1p1_200601-201012.nc")
+    lon <- as.numeric(ncvar_get(data, "lon") / 180 * pi - pi)
+    lat <- as.numeric(ncvar_get(data, "lat") / 180 * pi)
+    time <- as.numeric(ncvar_get(data, "time"))
+    tas <- ncvar_get(data, "tas")
+    idx.time.mean <- seq(from = 12, to = length(time), by = 12)
+    grd.all <- as.matrix(expand.grid(lon, lat))
+    ## order & condition based on 3D coordinates
+    l=grd.all[, 1]
+    L=grd.all[, 2]
+    locs=cbind(cos(L)*cos(l), cos(L)*sin(l), sin(L))
+    z.mean <- tas[, , idx.time.mean[1]]
+    for(i in 2 : length(idx.time.mean))
+        z.mean <- z.mean + tas[, , idx.time.mean[i]]
+    z.mean <- z.mean / length(idx.time.mean)
+    rslt <- matrix(NA, 3 + length(idx.time.mean), nrow(grd.all))
+    rslt[1 : 3, ] <- t(locs)
+    for(i in 1 : length(idx.time.mean)){
+        rslt[i + 3, ] <- as.vector(tas[, , idx.time.mean[i]] - 
+                                       z.mean)
+    }
+    write.table(rslt, file = paste0("temp", ".csv"), sep = ',', col.names = F,
+                row.names = F)
+}
+export_temp()
+```
+
+## Plot Figures with RData
+
+```{r plot from RData, eval = F}
+RDNames <- grep("*.RData", dir("./results/"), value = T)
+for(fn in RDNames){
+    fn <- paste0("results/", fn)
+    load(fn)
+    input$draw.palette <- T
+    if(length(grep("results/", input$fn)) == 0)
+        input$fn <- paste0("results/", input$fn)
+    do.call(sphere_plot, input)
+}
+
+```
+
 
 
 
