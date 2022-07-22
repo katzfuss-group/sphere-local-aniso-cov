@@ -147,7 +147,7 @@ parm_est <- function(par0, mask, z, locs, m, nuggets, n.MCMC, burnin,
         if(mask[1] == T & mask[4] == F)
             parLong[4] <- parLong[1]
         cat("Parm = ", parLong)
-        if(parLong[9] > 10){
+        if(any(abs(parLong) > 10)){
             loglk <- -Inf
         }else{
             # Vecchia loglk
@@ -174,10 +174,10 @@ parm_est <- function(par0, mask, z, locs, m, nuggets, n.MCMC, burnin,
     if(!is.null(debugFn))
         save(samp, file = debugFn)
     #thinned values after convergence
-    samp.eff <- samp$samples[seq(burnin, n.MCMC, by=10), ]
+    samp.eff <- samp$samples[seq(burnin, n.MCMC, by=10), , drop = F]
     #par.est
-    par.est <- par0
-    par.est[mask] <- colMeans(samp.eff)
+    par.est <- matrix(par0, nrow(samp.eff), length(par0), byrow = T)
+    par.est[, mask] <- samp.eff
     par.est
 }
 
@@ -218,18 +218,10 @@ sphere_plot <- function(z.all, mask, lon, lat, zlim = range(z.all, na.rm = T),
 
 ###### Compute MAE, RMSE, CRPS, Energy ######
 score_func <- function(z, preds, n.energy = 1000){
-    MAE <- mean(abs(z - preds$mu.pred))
-    RMSE <- sqrt(mean((z - preds$mu.pred)^2))
-    CRPS <- mean(crps_norm(z, mean = preds$mu.pred, sd = sqrt(preds$var.pred)))
-    n <- length(preds$mu.obs)
-    n.p <- length(preds$mu.pred)
-    norm.sample <- matrix(rnorm(n.energy * (n + n.p)), ncol = n.energy)
-    orig.order <- order(preds$U.obj$ord)
-    ord.pred <- seq(n + n.p, 1, by=-1)[orig.order[!preds$U.obj$obs[orig.order]]]
-    post.draws <- Matrix::solve(Matrix::t(preds$V.ord), 
-                                norm.sample)[ord.pred, ] +
-        preds$mu.pred
-    Energy <- es_sample(z, as.matrix(post.draws))
+    MAE <- mean(abs(z - colMeans(preds)))
+    RMSE <- sqrt(mean((z - colMeans(preds))^2))
+    CRPS <- mean(crps_norm(z, mean = colMeans(preds), sd = apply(preds, 2, sd)))
+    Energy <- es_sample(z, t(preds))
     ret <- c(MAE, RMSE, CRPS, Energy)
     names(ret) <- c("MAE", "RMSE", "CRPS", "Energy")
     return(ret)
@@ -238,7 +230,7 @@ score_func <- function(z, preds, n.energy = 1000){
 
 ###### Function for sim/real application studies  ######
 sim_func <- function(ns, grd.obj, z.all, nu, range, nuggets, 
-                     type, plot.flag = F){
+                     type, plot.flag = F, seed = 1){
     prop.train <- 0.8
     n.test.region <- 10
     mask.train.rnd <- mask_gen_rnd(ns, prop.train)
@@ -314,22 +306,32 @@ sim_func <- function(ns, grd.obj, z.all, nu, range, nuggets,
         # change the last coef in parm.est to exp parm.est if the last coef in
         #   par.mask is TRUE
         if(par.mask[length(par.mask)]){
-            parm.est.rnd[length(par.mask)] <- 
-                exp(parm.est.rnd[length(par.mask)])
-            parm.est.region[length(par.mask)] <- 
-                exp(parm.est.region[length(par.mask)])
+            parm.est.rnd[, length(par.mask)] <- 
+                exp(parm.est.rnd[, length(par.mask)])
+            parm.est.region[, length(par.mask)] <- 
+                exp(parm.est.region[, length(par.mask)])
         }
             
-        z.pred.rnd <- resp_pred(parm.est.rnd, z.all[mask.train.rnd], 
-                                locxyz.all[mask.train.rnd, ], 
-                                locxyz.all[mask.test.rnd, ], m, nuggets)
-        z.pred.region <- resp_pred(parm.est.region, z.all[mask.train.region], 
-                                   locxyz.all[mask.train.region, ], 
-                                   locxyz.all[mask.test.region, ], m, nuggets)
+        z.pred.rnd <- matrix(NA, nrow(parm.est.rnd), sum(mask.test.rnd))
+        z.pred.region <- matrix(NA, nrow(parm.est.region), 
+                                sum(mask.test.region))
+        for(k in 1 : nrow(parm.est.rnd)){
+            z.pred.rnd[k, ] <- resp_pred(parm.est.rnd[k, ], 
+                                         z.all[mask.train.rnd], 
+                                         locxyz.all[mask.train.rnd, ], 
+                                         locxyz.all[mask.test.rnd, ], 
+                                         m, nuggets)$mu.pred
+            z.pred.region[k, ] <- resp_pred(parm.est.region[k, ], 
+                                            z.all[mask.train.region], 
+                                            locxyz.all[mask.train.region, ], 
+                                            locxyz.all[mask.test.region, ], 
+                                            m, nuggets)$mu.pred
+        }
+        
         tbl[i, ] <- c(score_func(z.all[mask.test.rnd], z.pred.rnd), 
                       score_func(z.all[mask.test.region], z.pred.region))
         z.all.pred <- z.all
-        z.all.pred[mask.test.rnd] <- z.pred.rnd$mu.pred
+        z.all.pred[mask.test.rnd] <- colMeans(z.pred.rnd)
         if(plot.flag){
             sphere_plot(z.all.pred, rep(T, ns), grd.obj$lon, grd.obj$lat,
                         draw.palette = F, 
@@ -346,7 +348,7 @@ sim_func <- function(ns, grd.obj, z.all, nu, range, nuggets,
         }
         
         z.all.pred <- z.all
-        z.all.pred[mask.test.region] <- z.pred.region$mu.pred
+        z.all.pred[mask.test.region] <- colMeans(z.pred.region)
         if(plot.flag){
             sphere_plot(z.all.pred, rep(T, ns), grd.obj$lon, grd.obj$lat,
                         draw.palette = F, 
@@ -362,6 +364,6 @@ sim_func <- function(ns, grd.obj, z.all, nu, range, nuggets,
                                       mdl.lst[[i]], "-pred.RData"))
         }
     }
-    write.table(format(tbl, digits=4), paste0("tbl_", type, ".out"), 
+    write.table(format(tbl, digits=4), paste0("tbl_", type, "_", seed, ".out"), 
                 sep = " & ", eol = "\\\\\n", quote = F)
 }

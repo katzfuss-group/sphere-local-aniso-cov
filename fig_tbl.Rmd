@@ -13,6 +13,8 @@ This markdown produces the figures and tables used in ``locally anisotropic cova
 
 ```{r libs and source, eval = T, echo = F, include = F}
 rm(list = ls())
+devtools::install_github("https://github.com/katzfuss-group/GPvecchia", 
+                         ref = "JJ")
 source("func.R")
 ```
 
@@ -40,8 +42,9 @@ fig4()
 
 Setting the `range` parameter to `0.1`, in the isotropic case, we have on average $29$ responses that are correlated with each response by more than $5\%$.
 ```{r fig 5 6 7 tbl 1, eval = F, echo=FALSE}
-sim_study <- function(type = c("iso", "axially", "nonsta"), plot.flag = F){
-    set.seed(1)
+sim_study <- function(type = c("iso", "axially", "nonsta"), plot.flag = F, 
+                      seed = 1){
+    set.seed(seed)
     type = type[1]
     if(type == "iso"){
         alpha <- c(-0.5, 0.0, 0.0)  
@@ -65,11 +68,14 @@ sim_study <- function(type = c("iso", "axially", "nonsta"), plot.flag = F){
     ns <- nsrt^2
     grd.obj <- grd_gen(nsrt)
     z.all <- z_gen(alpha, beta, grd.obj$grd.all, kappa, nu, range, nuggets)
-    
+    if(plot.flag)
+        sphere_plot(z.all, rep(T, length(z.all)), grd.obj$lon, grd.obj$lat, 
+                    draw.palette = T, 
+                    fn = paste0("results/", type, "-true.pdf"), zlim = c(-3, 3))
     sim_func(ns = ns, grd.obj = grd.obj, z.all = z.all, nu = nu, 
-             range = range, nuggets = nuggets, type = type)
+             range = range, nuggets = nuggets, type = type, seed = seed)
 }
-sim_study("nonsta")
+sim_study("iso", seed = 1)
 ```
 
 ```{r plot sim data rslt, eval = F}
@@ -145,7 +151,7 @@ real_app <- function(plot.flag = F)
     ns <- length(z.all)
     if(plot.flag)
         sphere_plot(z.all, rep(T, length(z.all)), lon, lat, fig.width = 13.44, 
-                    fig.height = 8.73, draw.palette = T, fn = "Dec2019Prcp.pdf")
+                    fig.height = 8.73, draw.palette = T, fn = "Prcp.pdf")
     sim_func(ns = ns, grd.obj = grd.obj, z.all = z.all, nu = 2.5, 
              range = 0.1, nuggets = 0.05^2, type = "real", plot.flag = plot.flag)
 }
@@ -198,6 +204,44 @@ for(fn in RDNames){
 }
 
 ```
+
+## Combina results from simulation replicates
+
+```{r results from sim reps, eval = F}
+nrep = 5
+tbl.iso <- read.table("results/tbl_iso_1.out", sep = '&', 
+                          comment.char = '\\')
+tbl.axially <- read.table("results/tbl_axially_1.out", sep = '&', 
+                          comment.char = '\\')
+tbl.nonsta <- read.table("results/tbl_nonsta_1.out", sep = '&', 
+                          comment.char = '\\')
+for(i in 2 : nrep){
+    tbl.iso <- tbl.iso + read.table(
+        paste0("results/tbl_iso_", i, ".out"), sep = '&', 
+        comment.char = '\\')
+    tbl.axially <- tbl.axially + read.table(
+        paste0("results/tbl_axially_", i, ".out"), sep = '&', 
+        comment.char = '\\')
+    tbl.nonsta <- tbl.nonsta + read.table(
+        paste0("results/tbl_nonsta_", i, ".out"), sep = '&', 
+        comment.char = '\\')
+}
+tbl.iso <- tbl.iso / nrep
+tbl.axially <- tbl.axially / nrep
+tbl.nonsta <- tbl.nonsta / nrep
+for (type in c("iso", "axially", "nonsta"))
+    write.table(format(get(paste0("tbl.", type)), digits = 4), 
+                paste0("results/tbl_", type, ".out"), 
+                sep = " & ", eol = "\\\\\n", quote = F)    
+
+```
+
+
+
+
+
+
+
 
 
 
