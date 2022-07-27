@@ -68,24 +68,22 @@ sim_study <- function(type = c("iso", "axially", "nonsta"), plot.flag = F,
     ns <- nsrt^2
     grd.obj <- grd_gen(nsrt)
     z.all <- z_gen(alpha, beta, grd.obj$grd.all, kappa, nu, range, nuggets)
-    if(plot.flag)
-        sphere_plot(z.all, rep(T, length(z.all)), grd.obj$lon, grd.obj$lat, 
+    if(plot.flag){
+      sphere_plot(z.all, rep(T, length(z.all)), grd.obj$lon, grd.obj$lat, 
                     draw.palette = T, 
                     fn = paste0("results/", type, "-true.pdf"), zlim = c(-3, 3))
+    }else{
+      input <- list(z.all = z.all, mask = rep(T, length(z.all)), 
+                    lon = grd.obj$lon,
+                    lat = grd.obj$lat, draw.palette = T, 
+                    fn = paste0(type, "-true.pdf"))
+      save(input, file = paste0("results/", type, "-true.RData"))
+    }
+    
     sim_func(ns = ns, grd.obj = grd.obj, z.all = z.all, nu = nu, 
              range = range, nuggets = nuggets, type = type, seed = seed)
 }
-sim_study("iso", seed = 1)
-```
-
-```{r plot sim data rslt, eval = F}
-for(fn in list.files(pattern = "(rect|rand).*RData")){
-    load(fn)
-    sphere_plot(z.all = input$z.all, mask = input$mask, lon = input$lon, 
-                lat = input$lat, draw.palette = T, 
-                fn = input$fn, fig.width = 11.11, fig.height = 8.33, 
-                zlim = c(-3, 3))
-}
+sim_study("nonsta", seed = 1)
 ```
 
 ## Real Data Application Temperature
@@ -202,7 +200,32 @@ for(fn in RDNames){
         input$fn <- paste0("results/", input$fn)
     do.call(sphere_plot, input)
 }
+```
 
+## Plot prediction errors of nonsta-true 
+
+```{r plot errors of nonsta-true, eval = F}
+typeTrue <- "nonsta"
+typeMdls <- c("iso", "axially", "nonsta") 
+RDNames <- grep(paste0("rect-", type, "*.RData"), dir("./results/"), 
+                value = T)
+unknownTypes <- c("rect", "rand")
+for(unknownType in unknownTypes)
+{
+  for(type in typeMdls){
+    fnTrue <- paste0("results/", unknownType, "-", typeTrue, "-true.RData")
+    fn <- paste0("results/", unknownType, "-", typeTrue, "-", type, 
+                 "-pred.RData")
+    load(fnTrue)
+    inputTrue <- input
+    load(fn)
+    input$z.all <- input$z.all - inputTrue$z.all
+    input$draw.palette <- T
+    if(length(grep("results/", input$fn)) == 0)
+      input$fn <- paste0("results/", input$fn)
+    do.call(sphere_plot, input)
+  }
+}
 ```
 
 ## Combina results from simulation replicates
@@ -230,7 +253,7 @@ tbl.iso <- tbl.iso / nrep
 tbl.axially <- tbl.axially / nrep
 tbl.nonsta <- tbl.nonsta / nrep
 for (type in c("iso", "axially", "nonsta"))
-    write.table(format(get(paste0("tbl.", type)), digits = 4), 
+    write.table(format(get(paste0("tbl.", type)), digits = 3), 
                 paste0("results/tbl_", type, ".out"), 
                 sep = " & ", eol = "\\\\\n", quote = F)    
 

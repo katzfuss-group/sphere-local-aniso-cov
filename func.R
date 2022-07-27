@@ -147,7 +147,7 @@ parm_est <- function(par0, mask, z, locs, m, nuggets, n.MCMC, burnin,
         if(mask[1] == T & mask[4] == F)
             parLong[4] <- parLong[1]
         cat("Parm = ", parLong)
-        if(any(abs(parLong) > 10)){
+        if(any(abs(parLong) > 20)){ # reduce this value if singularity occurs
             loglk <- -Inf
         }else{
             # Vecchia loglk
@@ -250,9 +250,9 @@ sim_func <- function(ns, grd.obj, z.all, nu, range, nuggets,
                            .0,.0,2.500000,exp(-2.5987020)),
                          c(-0.2736117,.0,.0,-1.5002264,.0,
                            .0,.0,2.500000,exp(-2.5987020)))
-        par.mask.lst <- list(c(T, F, F, F, F, F, F, F, T),
-                             c(T, F, T, T, F, T, F, F, T),
-                             c(T, T, T, T, T, T, T, F, T))
+        par.mask.lst <- list(c(T, F, F, F, F, F, F, F, F),
+                             c(T, F, T, T, F, T, F, F, F),
+                             c(T, T, T, T, T, T, T, F, F))
     }else{
         par0.lst <- list(c(rep(0, 7), nu, range),
                          c(rep(0, 7), nu, range),
@@ -364,6 +364,6 @@ sim_func <- function(ns, grd.obj, z.all, nu, range, nuggets,
                                       mdl.lst[[i]], "-pred.RData"))
         }
     }
-    write.table(format(tbl, digits=4), paste0("tbl_", type, "_", seed, ".out"), 
+    write.table(format(tbl, digits=3), paste0("tbl_", type, "_", seed, ".out"), 
                 sep = " & ", eol = "\\\\\n", quote = F)
 }
