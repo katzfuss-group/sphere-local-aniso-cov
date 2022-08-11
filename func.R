@@ -205,7 +205,7 @@ sphere_plot <- function(z.all, mask, lon, lat, zlim = range(z.all, na.rm = T),
     if(!is.null(fn))
         pdf(fn, fig.width, fig.height)
     if(draw.palette)
-        drawPalette(colormap = cm)
+        drawPalette(colormap = cm, cex = 2.5)
     mapPlot(longitude = c(-180, 180, 0, 0), latitude = c(0, 0, -90, 90), 
             grid = TRUE, col = "lightgray", drawBox = FALSE, 
             longitudelim = c(-180, 180), type = "n") # defaults to moll projection
