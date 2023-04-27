@@ -67,7 +67,13 @@ mask_gen_region <- function(grd.all, lon.width, lat.width) {
     lat.mask <- abs(grd.all[, 2] - lat) < lat.width 
     return(!(lon.mask & lat.mask))
 }
-
+mask_gen_Nile <- function(grd.all) {
+  lon <- grd.all[, 1]
+  lat <- grd.all[, 2]
+  lon.mask <- (lon >= 29.9 / 180 * pi) & (lon <= 32.6 / 180 * pi)
+  lat.mask <- (lat >= 22 / 180 * pi) & (lat <= 30 / 180 * pi)
+  return(!(lon.mask & lat.mask))
+}
 
 ###### Generate responses ######
 z_gen <- function(alpha, beta, grd.all, kappa, nu, range, nuggets, 
@@ -235,10 +241,14 @@ sim_func <- function(ns, grd.obj, z.all, nu, range, nuggets,
     n.test.region <- 10
     mask.train.rnd <- mask_gen_rnd(ns, prop.train)
     mask.test.rnd <- !mask.train.rnd
-    mask.train.region <- rep(T, ns)
-    for(i in 1 : n.test.region){
+    if(type == "real"){
+      mask.train.region <- mask_gen_Nile(grd.obj$grd.all)
+    }else{
+      mask.train.region <- rep(T, ns)
+      for(i in 1 : n.test.region){
         mask.train.region <- mask.train.region & 
-            mask_gen_region(grd.obj$grd.all, 0.4, 0.2)
+          mask_gen_region(grd.obj$grd.all, 0.4, 0.2)
+      }
     }
     mask.test.region <- !mask.train.region
     locxyz.all <- cart(grd.obj$grd.all[, 1], grd.obj$grd.all[, 2])
